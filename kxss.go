@@ -86,12 +86,12 @@ func main() {
 	})
 
 	charChecks := makePool(appendChecks, func(c paramCheck, output chan paramCheck) {
-		wasReflected, err := checkAppend(c.url, c.param, "iy3j4h234hjb23234")
+		wasReflected, isError, err := checkAppend(c.url, c.param, "iy3j4h234hjb23234")
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "error from checkAppend for url %s with param %s: %s\n", c.url, c.param, err)
 			return
 		}
-		if wasReflected {
+		if wasReflected || isError {
 			output <- paramCheck{c.url, c.param}
 		}
 	})
@@ -201,11 +201,9 @@ func checkAppend(targetURL, param, suffix string) (bool, bool, error) {
 		return false, false, err
 	}
 
-	// Check for server errors (e.g., SQL errors) as an indication of unfiltered input
 	bodyStr := string(b)
 	isError := strings.Contains(bodyStr, "SQL syntax") || resp.StatusCode >= 500
 
-	// If not HTML or redirect, skip reflection check
 	if strings.HasPrefix(resp.Status, "3") {
 		return false, isError, nil
 	}
@@ -214,7 +212,6 @@ func checkAppend(targetURL, param, suffix string) (bool, bool, error) {
 		return false, isError, nil
 	}
 
-	// Check if the suffix (test character) is reflected in the response body
 	if strings.Contains(bodyStr, suffix) {
 		return true, isError, nil
 	}
