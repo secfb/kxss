@@ -24,7 +24,7 @@ Run `kxss` on the output file:
 ```
 ./kxss -f katana_passive.txt
 
-./kxss -f katana_active.txt -o reflected_parameters.txt
+./kxss -f katana_active.txt -o reflected_parameters.txt && awk '/^URL:/ {print $2}' reflected_parameters.txt
 ```
 Alternatively, pipe `katana` output directly:
 ```
