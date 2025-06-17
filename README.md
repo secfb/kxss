@@ -9,14 +9,18 @@ go run kxss.go -h
 ```
 #### Workflow with Katana
 `kxss` integrates well with `katana`, a web crawler for discovering URLs. 
-A typical workflow involves:
-Crawl a target domain with `katana` to extract URLs with query parameters:
+
+Passive or active crawl a target domain with `katana` to extract URLs with query parameters:
 ```
-katana -u vulnweb.com -ps -f qurl -o katana.txt
+katana -u vulnweb.com -ps -f qurl -o passive_crawl.txt
+
+katana -u http://testphp.vulnweb.com -f qurl -o active_crawl.txt
 ```
 Run `kxss` on the output file:
 ```
-go run kxss.go -f katana.txt
+go run kxss.go -f passive_crawl.txt
+
+go run kxss.go -f active_crawl.txt -o reflected_parameters.txt
 ```
 Alternatively, pipe `katana` output directly:
 ```
