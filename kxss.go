@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"crypto/tls"
+	"flag"
 	"fmt"
 	"io/ioutil"
 	"net"
@@ -33,11 +34,42 @@ var httpClient = &http.Client{
 }
 
 func main() {
+	var inputFile string
+	var outputFile string
+	flag.StringVar(&inputFile, "f", "", "file containing URLs to process")
+	flag.StringVar(&outputFile, "o", "", "file to write output to")
+	flag.Parse()
+
 	httpClient.CheckRedirect = func(req *http.Request, via []*http.Request) error {
 		return http.ErrUseLastResponse
 	}
 
-	sc := bufio.NewScanner(os.Stdin)
+	var scanner *bufio.Scanner
+	if inputFile != "" {
+		file, err := os.Open(inputFile)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "error opening input file %s: %s\n", inputFile, err)
+			os.Exit(1)
+		}
+		defer file.Close()
+		scanner = bufio.NewScanner(file)
+	} else {
+		scanner = bufio.NewScanner(os.Stdin)
+	}
+
+	var out *os.File
+	if outputFile != "" {
+		file, err := os.Create(outputFile)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "error creating output file %s: %s\n", outputFile, err)
+			os.Exit(1)
+		}
+		defer file.Close()
+		out = file
+	} else {
+		out = os.Stdout
+	}
+
 	initialChecks := make(chan paramCheck, 40)
 
 	appendChecks := makePool(initialChecks, func(c paramCheck, output chan paramCheck) {
@@ -56,7 +88,7 @@ func main() {
 	charChecks := makePool(appendChecks, func(c paramCheck, output chan paramCheck) {
 		wasReflected, err := checkAppend(c.url, c.param, "iy3j4h234hjb23234")
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "error from checkAppend for url %s with param %s: %s", c.url, c.param, err)
+			fmt.Fprintf(os.Stderr, "error from checkAppend for url %s with param %s: %s\n", c.url, c.param, err)
 			return
 		}
 		if wasReflected {
@@ -69,7 +101,7 @@ func main() {
 		for _, char := range []string{"\"", "'", "<", ">", "$", "|", "(", ")", "`", ":", ";", "{", "}"} {
 			wasReflected, err := checkAppend(c.url, c.param, "aprefix"+char+"asuffix")
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "error from checkAppend for url %s with param %s with %s: %s", c.url, c.param, char, err)
+				fmt.Fprintf(os.Stderr, "error from checkAppend for url %s with param %s with %s: %s\n", c.url, c.param, char, err)
 				continue
 			}
 			if wasReflected {
@@ -77,12 +109,16 @@ func main() {
 			}
 		}
 		if len(output_of_url) > 2 {
-			fmt.Printf("URL: %s Param: %s Unfiltered: %v \n", output_of_url[0], output_of_url[1], output_of_url[2:])
+			fmt.Fprintf(out, "URL: %s Param: %s Unfiltered: %v \n", output_of_url[0], output_of_url[1], output_of_url[2:])
 		}
 	})
 
-	for sc.Scan() {
-		initialChecks <- paramCheck{url: sc.Text()}
+	for scanner.Scan() {
+		initialChecks <- paramCheck{url: scanner.Text()}
+	}
+	if err := scanner.Err(); err != nil {
+		fmt.Fprintf(os.Stderr, "error reading input: %s\n", err)
+		os.Exit(1)
 	}
 
 	close(initialChecks)
@@ -168,7 +204,7 @@ func makePool(input chan paramCheck, fn workerFunc) chan paramCheck {
 			for c := range input {
 				fn(c, output)
 			}
-			wg.Done()
+			wg.Sone()
 		}()
 	}
 	go func() {
