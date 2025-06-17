@@ -99,12 +99,12 @@ func main() {
 	done := makePool(charChecks, func(c paramCheck, output chan paramCheck) {
 		output_of_url := []string{c.url, c.param}
 		for _, char := range []string{"\"", "'", "<", ">", "$", "|", "(", ")", "`", ":", ";", "{", "}"} {
-			wasReflected, err := checkAppend(c.url, c.param, "aprefix"+char+"asuffix")
+			wasReflected, isError, err := checkAppend(c.url, c.param, char)
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "error from checkAppend for url %s with param %s with %s: %s\n", c.url, c.param, char, err)
 				continue
 			}
-			if wasReflected {
+			if wasReflected || isError {
 				output_of_url = append(output_of_url, char)
 			}
 		}
@@ -171,26 +171,55 @@ func checkReflected(targetURL string) ([]string, error) {
 	return out, nil
 }
 
-func checkAppend(targetURL, param, suffix string) (bool, error) {
+func checkAppend(targetURL, param, suffix string) (bool, bool, error) {
 	u, err := url.Parse(targetURL)
 	if err != nil {
-		return false, err
+		return false, false, err
 	}
 	qs := u.Query()
 	val := qs.Get(param)
 	qs.Set(param, val+suffix)
 	u.RawQuery = qs.Encode()
 
-	reflected, err := checkReflected(u.String())
+	req, err := http.NewRequest("GET", u.String(), nil)
 	if err != nil {
-		return false, err
+		return false, false, err
 	}
-	for _, r := range reflected {
-		if r == param {
-			return true, nil
-		}
+	req.Header.Add("User-Agent", "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/80.0.3987.100 Safari/537.36")
+
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		return false, false, err
 	}
-	return false, nil
+	if resp.Body == nil {
+		return false, false, err
+	}
+	defer resp.Body.Close()
+
+	b, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return false, false, err
+	}
+
+	// Check for server errors (e.g., SQL errors) as an indication of unfiltered input
+	bodyStr := string(b)
+	isError := strings.Contains(bodyStr, "SQL syntax") || resp.StatusCode >= 500
+
+	// If not HTML or redirect, skip reflection check
+	if strings.HasPrefix(resp.Status, "3") {
+		return false, isError, nil
+	}
+	ct := resp.Header.Get("Content-Type")
+	if ct != "" && !strings.Contains(ct, "html") {
+		return false, isError, nil
+	}
+
+	// Check if the suffix (test character) is reflected in the response body
+	if strings.Contains(bodyStr, suffix) {
+		return true, isError, nil
+	}
+
+	return false, isError, nil
 }
 
 type workerFunc func(paramCheck, chan paramCheck)
