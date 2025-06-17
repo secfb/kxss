@@ -16,17 +16,17 @@ go mod init kxss.go && go mod tidy && go build -o kxss
 
 Passive or active crawl a target domain with `katana` to extract URLs with query parameters:
 ```
-katana -u vulnweb.com -ps -f qurl -o passive_crawl.txt
+katana -u vulnweb.com -ps -f qurl -o katana_passive_crawl.txt && uro -i katana_passive_crawl.txt -o katana_passive.txt
 
-katana -u http://testphp.vulnweb.com -f qurl -o active_crawl.txt
+katana -u http://testphp.vulnweb.com -f qurl -o katana_active_crawl.txt && uro -i katana_active_crawl.txt -o katana_active.txt
 ```
 Run `kxss` on the output file:
 ```
-./kxss -f passive_crawl.txt
+./kxss -f katana_passive.txt
 
-./kxss -f active_crawl.txt -o reflected_parameters.txt
+./kxss -f katana_active.txt -o reflected_parameters.txt
 ```
 Alternatively, pipe `katana` output directly:
 ```
-katana -u vulnweb.com -ps -f qurl | go run kxss.go
+katana -u vulnweb.com -ps -f qurl | ./kxss
 ```
