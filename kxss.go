@@ -204,7 +204,7 @@ func makePool(input chan paramCheck, fn workerFunc) chan paramCheck {
 			for c := range input {
 				fn(c, output)
 			}
-			wg.Sone()
+			wg.Done()
 		}()
 	}
 	go func() {
