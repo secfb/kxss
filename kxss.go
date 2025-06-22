@@ -36,9 +36,16 @@ var httpClient = &http.Client{
 func main() {
 	var inputFile string
 	var outputFile string
+	var numWorkers int
 	flag.StringVar(&inputFile, "f", "", "file containing URLs to process")
 	flag.StringVar(&outputFile, "o", "", "file to write output to")
+	flag.IntVar(&numWorkers, "w", 40, "number of worker goroutines")
 	flag.Parse()
+
+	if numWorkers < 1 {
+		fmt.Fprintf(os.Stderr, "number of workers must be at least 1\n")
+		os.Exit(1)
+	}
 
 	httpClient.CheckRedirect = func(req *http.Request, via []*http.Request) error {
 		return http.ErrUseLastResponse
@@ -70,9 +77,9 @@ func main() {
 		out = os.Stdout
 	}
 
-	initialChecks := make(chan paramCheck, 40)
+	initialChecks := make(chan paramCheck, numWorkers)
 
-	appendChecks := makePool(initialChecks, func(c paramCheck, output chan paramCheck) {
+	appendChecks := makePool(initialChecks, numWorkers, func(c paramCheck, output chan paramCheck) {
 		reflected, err := checkReflected(c.url)
 		if err != nil {
 			return
@@ -85,7 +92,7 @@ func main() {
 		}
 	})
 
-	charChecks := makePool(appendChecks, func(c paramCheck, output chan paramCheck) {
+	charChecks := makePool(appendChecks, numWorkers, func(c paramCheck, output chan paramCheck) {
 		wasReflected, isError, err := checkAppend(c.url, c.param, "iy3j4h234hjb23234")
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "error from checkAppend for url %s with param %s: %s\n", c.url, c.param, err)
@@ -96,20 +103,28 @@ func main() {
 		}
 	})
 
-	done := makePool(charChecks, func(c paramCheck, output chan paramCheck) {
+	done := makePool(charChecks, numWorkers, func(c paramCheck, output chan paramCheck) {
 		output_of_url := []string{c.url, c.param}
+		sqlInjection := false
 		for _, char := range []string{"\"", "'", "<", ">", "$", "|", "(", ")", "`", ":", ";", "{", "}"} {
 			wasReflected, isError, err := checkAppend(c.url, c.param, char)
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "error from checkAppend for url %s with param %s with %s: %s\n", c.url, c.param, char, err)
 				continue
 			}
-			if wasReflected || isError {
+			if wasReflected {
 				output_of_url = append(output_of_url, char)
 			}
+			if isError {
+				sqlInjection = true
+			}
 		}
-		if len(output_of_url) > 2 {
-			fmt.Fprintf(out, "URL: %s Param: %s Unfiltered: %v \n", output_of_url[0], output_of_url[1], output_of_url[2:])
+		if len(output_of_url) > 2 || sqlInjection {
+			if sqlInjection {
+				fmt.Fprintf(out, "URL: %s Param: %s [Possible SQL Injection] Unfiltered: %v \n", output_of_url[0], output_of_url[1], output_of_url[2:])
+			} else {
+				fmt.Fprintf(out, "URL: %s Param: %s Unfiltered: %v \n", output_of_url[0], output_of_url[1], output_of_url[2:])
+			}
 		}
 	})
 
@@ -221,10 +236,10 @@ func checkAppend(targetURL, param, suffix string) (bool, bool, error) {
 
 type workerFunc func(paramCheck, chan paramCheck)
 
-func makePool(input chan paramCheck, fn workerFunc) chan paramCheck {
+func makePool(input chan paramCheck, numWorkers int, fn workerFunc) chan paramCheck {
 	var wg sync.WaitGroup
 	output := make(chan paramCheck)
-	for i := 0; i < 40; i++ {
+	for i := 0; i < numWorkers; i++ {
 		wg.Add(1)
 		go func() {
 			for c := range input {
