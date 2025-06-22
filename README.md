@@ -31,4 +31,8 @@ Run `kxss` on the output file:
 Alternatively, pipe `katana` output directly:
 ```
 katana -u vulnweb.com -ps -f qurl | ./kxss
+
+URL: http://testphp.vulnweb.com/hpp/?pp= Param: pp Unfiltered: [" ' < > $ | ( ) ` : ; { }]
+URL: http://testphp.vulnweb.com/hpp/params.php?p= Param: p Unfiltered: [" ' < > $ | ( ) ` : ; { }]
+URL: http://testphp.vulnweb.com/product.php?pic=6 Param: pic [Possible SQL Injection] Unfiltered: [" ' < > $ | ( ) ` : ; { }]
 ```
