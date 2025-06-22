@@ -8,8 +8,13 @@ go mod init kxss.go && go mod tidy && go build -o kxss
 ```
 ./kxss -h
 
--f string     file containing URLs to process
--o string     file to write output to
+Usage of ./kxss:
+  -f string
+        file containing URLs to process
+  -o string
+        file to write output to
+  -w int
+        number of worker goroutines (default 40)
 ```
 #### Workflow with Katana
 `kxss` integrates well with `katana`, a web crawler for discovering URLs. 
